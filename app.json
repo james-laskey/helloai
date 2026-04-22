@@ -20,8 +20,18 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "package": "com.anonymous.hello"
     },
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to use the microphone for voice conversations.",
+          "speechRecognitionPermission": "Allow $(PRODUCT_NAME) to use speech recognition for language learning."
+        }
+      ]
+    ],
     "web": {
       "favicon": "./assets/favicon.png"
     }
