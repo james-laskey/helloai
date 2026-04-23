@@ -35,7 +35,11 @@ export const TopicSelectionScreen = ({
   
   const currentLanguageData = LANGUAGE_TOPICS[selectedLanguage];
   const topics = currentLanguageData?.topics || [];
-
+  const handleStatsPress = async () => {
+    console.log('Fetching stats...');
+    await onFetchStats(); // Fetch latest data
+    onToggleStats(); // Then show modal
+  };
   // Custom TopicCard wrapper with action buttons
   const TopicCardWithActions = ({ topic, color }) => (
     <View style={styles.topicCardWrapper}>
@@ -83,7 +87,7 @@ export const TopicSelectionScreen = ({
       <View style={styles.topBar}>
         <LanguageDropdown selectedLanguage={selectedLanguage} onSelectLanguage={onSelectLanguage} />
         <View style={styles.topBarRight}>
-          <TouchableOpacity onPress={onToggleStats} style={styles.iconButton}>
+          <TouchableOpacity onPress={handleStatsPress} style={styles.iconButton}>
             <Ionicons name="stats-chart" size={22} color="#fff" />
           </TouchableOpacity>
           <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.iconButton}>

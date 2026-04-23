@@ -1,4 +1,4 @@
-// screens/LearningScreen.js - Simplified version without tabs
+// screens/LearningScreen.js - Fixed version with updateMastery
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -7,7 +7,8 @@ import {
   SafeAreaView,
   StatusBar,
   TouchableOpacity,
-  Text
+  Text,
+  ActivityIndicator
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { CallScreen } from './CallScreen';
@@ -61,6 +62,8 @@ export const LearningScreen = ({
   const generateFlashcards = async () => {
     setLoading(true);
     try {
+      console.log('Generating flashcards for:', selectedTopic.name);
+      
       const result = await learningApi.generateFlashcards({
         userId: userPreferences?.id || 'anonymous',
         topicId: selectedTopic.id,
@@ -68,8 +71,15 @@ export const LearningScreen = ({
         language: selectedLanguage,
         userPreferences
       });
-      setFlashcards(result.flashcards);
-      setFlashcardSetId(result.setId);
+      
+      console.log('Flashcards result:', result);
+      
+      if (result && result.flashcards) {
+        setFlashcards(result.flashcards);
+        setFlashcardSetId(result.setId);
+      } else {
+        console.error('No flashcards in response:', result);
+      }
     } catch (error) {
       console.error('Error generating flashcards:', error);
     } finally {
@@ -88,13 +98,55 @@ export const LearningScreen = ({
         userPreferences,
         questionCount: 10
       });
-      setQuiz(result.quiz);
-      setQuizAttemptId(result.attemptId);
+      
+      if (result && result.quiz) {
+        setQuiz(result.quiz);
+        setQuizAttemptId(result.attemptId);
+      }
     } catch (error) {
       console.error('Error generating quiz:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Update flashcard mastery when user marks a card as known/unknown
+  const updateFlashcardMastery = async (cardIndex, known) => {
+    if (!flashcardSetId) return;
+    
+    try {
+      await learningApi.updateFlashcardMastery({
+        setId: flashcardSetId,
+        userId: userPreferences?.id || 'anonymous',
+        topicId: selectedTopic.id,
+        cardIndex,
+        known
+      });
+      console.log(`Flashcard ${cardIndex} marked as ${known ? 'known' : 'needs review'}`);
+    } catch (error) {
+      console.error('Error updating flashcard mastery:', error);
+    }
+  };
+
+  const handleFlashcardComplete = (knownCount, totalCount) => {
+    console.log(`Flashcard session completed! Known: ${knownCount}/${totalCount}`);
+    // Refresh stats after completing flashcards
+    if (onFetchStats) {
+      onFetchStats();
+    }
+    setTimeout(() => {
+      onBack(); // This will return to TopicSelectionScreen
+    }, 1500);
+  };
+
+  const handleQuizComplete = (score, total) => {
+    console.log(`Quiz complete! Score: ${score}/${total}`);
+    if (onFetchStats) {
+      onFetchStats();
+    }
+    setTimeout(() => {
+      onBack(); // This will return to TopicSelectionScreen
+    }, 1500);
   };
 
   const handleBack = () => {
@@ -138,9 +190,28 @@ export const LearningScreen = ({
           </View>
         );
       }
-      if (flashcards) {
-        return <FlashcardComponent flashcards={flashcards} onComplete={() => {}} />;
+      if (flashcards && flashcards.length > 0) {
+        return (
+          <FlashcardComponent 
+            flashcards={flashcards} 
+            onComplete={handleFlashcardComplete}
+            onUpdateMastery={updateFlashcardMastery}
+          />
+        );
       }
+      // Show error or empty state
+      return (
+        <View style={styles.centerContainer}>
+          <Ionicons name="card-outline" size={48} color="rgba(255,255,255,0.5)" />
+          <Text style={styles.loadingText}>No flashcards available</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={generateFlashcards}
+          >
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      );
     }
 
     if (mode === 'quiz') {
@@ -152,9 +223,27 @@ export const LearningScreen = ({
           </View>
         );
       }
-      if (quiz) {
-        return <QuizComponent quiz={quiz} onSubmit={() => {}} onComplete={() => {}} />;
+      if (quiz && quiz.length > 0) {
+        return (
+          <QuizComponent 
+            quiz={quiz} 
+            onSubmit={() => {}} 
+            onComplete={handleQuizComplete} 
+          />
+        );
       }
+      return (
+        <View style={styles.centerContainer}>
+          <Ionicons name="help-buoy-outline" size={48} color="rgba(255,255,255,0.5)" />
+          <Text style={styles.loadingText}>No quiz available</Text>
+          <TouchableOpacity 
+            style={styles.retryButton}
+            onPress={generateQuiz}
+          >
+            <Text style={styles.retryButtonText}>Try Again</Text>
+          </TouchableOpacity>
+        </View>
+      );
     }
 
     return null;
@@ -204,6 +293,28 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   content: { flex: 1 },
-  centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { color: '#fff', fontSize: 16, marginTop: 12 },
+  centerContainer: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: { 
+    color: '#fff', 
+    fontSize: 16, 
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 20,
+    backgroundColor: '#53C691',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 30,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });

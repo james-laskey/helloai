@@ -1,14 +1,89 @@
 // services/api.js
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 const API_URL = 'https://helloapi-five.vercel.app';
 
+// Helper function to get token
+const getToken = async () => {
+  try {
+    const token = await AsyncStorage.getItem('accessToken');
+    return token;
+  } catch (error) {
+    console.error('Error getting token:', error);
+    return null;
+  }
+};
+
+// Helper function to refresh token
+const refreshAccessToken = async () => {
+  try {
+    const refreshToken = await AsyncStorage.getItem('refreshToken');
+    if (!refreshToken) return null;
+    
+    const response = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken })
+    });
+    
+    if (response.ok) {
+      const data = await response.json();
+      await AsyncStorage.setItem('accessToken', data.accessToken);
+      return data.accessToken;
+    }
+    return null;
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    return null;
+  }
+};
+
+// Helper function to make authenticated requests
+const authenticatedFetch = async (url, options = {}) => {
+  let token = await getToken();
+  
+  const makeRequest = async (requestToken) => {
+    const headers = {
+      'Content-Type': 'application/json',
+      ...options.headers,
+      ...(requestToken && { 'Authorization': `Bearer ${requestToken}` })
+    };
+    
+    const response = await fetch(url, {
+      ...options,
+      headers
+    });
+    
+    // If unauthorized, try to refresh token once
+    if (response.status === 401 && requestToken) {
+      const newToken = await refreshAccessToken();
+      if (newToken) {
+        // Retry with new token
+        const retryResponse = await fetch(url, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            ...options.headers,
+            'Authorization': `Bearer ${newToken}`
+          }
+        });
+        return retryResponse;
+      }
+    }
+    
+    return response;
+  };
+  
+  return makeRequest(token);
+};
+
 export const api = {
-  // Start session with user preferences (not a generated prompt)
+  // Start session with user preferences
   startSession: async (language, userId, topicId, topicName, topicConcept, topicExample, userPreferences) => {
     try {
-      const response = await fetch(`${API_URL}/api/session/start`, {
+      const response = await authenticatedFetch(`${API_URL}/api/session/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           language, 
           userId,
@@ -16,9 +91,10 @@ export const api = {
           topicName,
           topicConcept,
           topicExample,
-          userPreferences  // Send raw preferences, not a prompt
+          userPreferences
         })
       });
+      
       const data = await response.json();
       return data;
     } catch (error) {
@@ -29,21 +105,21 @@ export const api = {
     }
   },
 
-  // Send message - no system prompt needed (server stores it)
-  sendMessage: async (sessionId, message, language, topic, conversationHistory) => {
+  // Send message
+  sendMessage: async (sessionId,userId, message, language, topic, conversationHistory) => {
     try {
-      const response = await fetch(`${API_URL}/api/chat`, {
+      const response = await authenticatedFetch(`${API_URL}/api/chat`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
+          userId,
           message,
           language,
           topic: { id: topic.id, name: topic.name, concept: topic.concept },
           conversationHistory
-          // No systemPrompt here - server uses stored one
         })
       });
+      
       const data = await response.json();
       return data.response;
     } catch (error) {
@@ -52,12 +128,11 @@ export const api = {
     }
   },
 
-  endSession: async (sessionId) => {
+  endSession: async (sessionId, userId) => {
     try {
-      await fetch(`${API_URL}/api/session/end`, {
+      await authenticatedFetch(`${API_URL}/api/session/end`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId })
+        body: JSON.stringify({ sessionId, userId })
       });
     } catch (error) {
       console.error('End session error:', error);
@@ -66,11 +141,86 @@ export const api = {
 
   fetchStats: async (userId) => {
     try {
-      const response = await fetch(`${API_URL}/api/stats/${userId}`);
+      const response = await authenticatedFetch(`${API_URL}/api/stats/${userId}`, {
+        method: 'GET'
+      });
       return await response.json();
     } catch (error) {
       console.error('Fetch stats error:', error);
       return null;
     }
-  }
+  },
+
+  // Learning API methods
+  generateFlashcards: async (data) => {
+    try {
+      const response = await authenticatedFetch(`${API_URL}/api/learning/generate-flashcards`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Generate flashcards error:', error);
+      throw error;
+    }
+  },
+
+  generateQuiz: async (data) => {
+    try {
+      const response = await authenticatedFetch(`${API_URL}/api/learning/generate-quiz`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Generate quiz error:', error);
+      throw error;
+    }
+  },
+
+  submitQuiz: async (data) => {
+    try {
+      const response = await authenticatedFetch(`${API_URL}/api/learning/submit-quiz`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Submit quiz error:', error);
+      throw error;
+    }
+  },
+
+  updateFlashcardMastery: async (data) => {
+    try {
+      const response = await authenticatedFetch(`${API_URL}/api/learning/update-flashcard-mastery`, {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+      return await response.json();
+    } catch (error) {
+      console.error('Update mastery error:', error);
+      throw error;
+    }
+  },
+  updateSessionActivity: async (sessionId, data) => {
+    try {
+        const token = await AsyncStorage.getItem('accessToken');
+        const response = await fetch(`${API_URL}/api/session/activity`, {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({ 
+            sessionId, 
+            messageCount: data.messageCount,
+            duration: data.duration
+        })
+        });
+        return response.json();
+    } catch (error) {
+        console.error('Update session activity error:', error);
+    }
+    }
 };

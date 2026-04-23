@@ -14,7 +14,7 @@ const App = () => {
   const [hasCompletedQuestionnaire, setHasCompletedQuestionnaire] = useState(false);
   const [userData, setUserData] = useState(null);
   const [userPreferences, setUserPreferences] = useState(null);
-  
+  const [userId, setUserId] = useState(null);
   const [selectedLanguage, setSelectedLanguage] = useState('Spanish');
   const [selectedTopic, setSelectedTopic] = useState(null);
   const [isTopicSet, setIsTopicSet] = useState(false);
@@ -29,7 +29,6 @@ const App = () => {
   const [sessionId, setSessionId] = useState(null);
   const [showStats, setShowStats] = useState(false);
   const [userStats, setUserStats] = useState(null);
-  const [userId] = useState(`user_${Date.now()}`);
   
   const timerRef = useRef(null);
 
@@ -42,10 +41,12 @@ const App = () => {
     try {
       const savedUser = await AsyncStorage.getItem('userData');
       const savedPreferences = await AsyncStorage.getItem('userPreferences');
-      
+      const savedUserId = await AsyncStorage.getItem('userId'); // Load user ID
+
       if (savedUser && savedPreferences) {
         setUserData(JSON.parse(savedUser));
         setUserPreferences(JSON.parse(savedPreferences));
+        setUserId(savedUserId || JSON.parse(savedUser).id);
         setIsAuthenticated(true);
         setHasCompletedQuestionnaire(true);
         setSelectedLanguage(JSON.parse(savedPreferences).targetLanguage);
@@ -59,6 +60,7 @@ const App = () => {
     setUserData(user);
     setIsAuthenticated(true);
     await AsyncStorage.setItem('userData', JSON.stringify(user));
+    await AsyncStorage.setItem('userId', user.id); // Store for persistence
   };
 
   const handleQuestionnaireComplete = async (preferences) => {
@@ -156,6 +158,7 @@ const App = () => {
       
       const response = await api.sendMessage(
         sessionId, 
+        userId,
         userInput, 
         selectedLanguage, 
         selectedTopic, 
@@ -170,6 +173,11 @@ const App = () => {
       };
       
       setMessages(prev => [...prev, assistantMessage]);
+      // // ✅ Track message count on server
+      // await api.updateSessionActivity(sessionId, {
+      //   messageCount: messages.length + 1,
+      //   duration: callDuration
+      // });
       await speakText(response);
     } catch (error) {
       console.error('Generation error:', error);
@@ -262,7 +270,10 @@ const App = () => {
   };
   
   const fetchStats = async () => {
-    const stats = await api.fetchStats(userId);
+    if (!userId) return;
+    console.log('Fetching stats for userId:', userId);
+    const stats = await api.fetchStats(sessionId, userId);
+    console.log('Stats received:', stats);
     setUserStats(stats);
   };
   
@@ -284,7 +295,10 @@ const App = () => {
   
   const handleEndCall = async () => {
     setIsCallActive(false);
-    await api.endSession(sessionId);
+    console.log('Session ID:', sessionId);
+    console.log('User ID:', userId);
+    console.log('Call Duration:', callDuration);
+    await api.endSession(sessionId, userId);
     stopSpeaking();
     handleBackToTopics();
   };
@@ -300,7 +314,6 @@ const App = () => {
     setIsSpeaking(false);
     // Refresh stats when returning to topics
     fetchStats();
-    setShowStats(true);
   };
   
   const toggleStats = () => setShowStats(!showStats);

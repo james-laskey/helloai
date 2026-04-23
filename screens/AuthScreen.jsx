@@ -74,9 +74,6 @@ export const AuthScreen = ({ onAuthComplete, onSwitchToSignup, isSignupMode }) =
       
       if (response.success) {
         // Store tokens and user data
-        await AsyncStorage.setItem('accessToken', response.accessToken);
-        await AsyncStorage.setItem('refreshToken', response.refreshToken);
-        await AsyncStorage.setItem('userData', JSON.stringify(response.user));
         
         Alert.alert('Success', 'Account created successfully!');
         onAuthComplete(response.user);
