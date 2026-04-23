@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthScreen } from './screens/AuthScreen';
 import { QuestionnaireScreen } from './screens/QuestionnaireScreen';
 import { TopicSelectionScreen } from './screens/TopicSelectionScreen';
-import { CallScreen } from './screens/CallScreen';
+import { LearningScreen } from './screens/LearningScreen';
 import { api } from './services/api';
 import { getLanguageSpeechCode } from './utils/helpers';
 import { LANGUAGE_TOPICS } from './constants/languageTopics';
@@ -18,6 +18,7 @@ const App = () => {
   const [selectedLanguage, setSelectedLanguage] = useState('Spanish');
   const [selectedTopic, setSelectedTopic] = useState(null);
   const [isTopicSet, setIsTopicSet] = useState(false);
+  const [learningMode, setLearningMode] = useState(null); // 'tutor', 'flashcards', 'quiz'
   const [messages, setMessages] = useState([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -67,14 +68,11 @@ const App = () => {
     await AsyncStorage.setItem('userPreferences', JSON.stringify(preferences));
   };
 
-  // REMOVED: getPersonalizedSystemPrompt() - Now handled server-side
-
   // Helper function to create personalized introductions
   const createPersonalizedIntroduction = (topic, language) => {
     const languageIcon = LANGUAGE_TOPICS[language]?.icon || '📚';
     const proficiencyLevel = userPreferences?.proficiencyLevel || 5;
     
-    // Adjust introduction based on proficiency level
     if (proficiencyLevel <= 3) {
       return `📖 ${languageIcon} Hello! Today we learn "${topic.name}". ${topic.description}. Example: "${topic.example}". Ready? Let's start!`;
     } else if (proficiencyLevel <= 7) {
@@ -84,15 +82,15 @@ const App = () => {
     }
   };
 
-  // Handle topic selection and start the tutoring session
-  const handleTopicSelect = async (topic) => {
+  // Start AI Tutor session
+  const handleStartTutor = async (topic) => {
     setSelectedTopic(topic);
+    setLearningMode('tutor');
     setIsTopicSet(true);
     setIsCallActive(true);
     setIsLoading(true);
     
     try {
-      // Pass user preferences to server - server generates the prompt
       const data = await api.startSession(
         selectedLanguage, 
         userId, 
@@ -100,12 +98,11 @@ const App = () => {
         topic.name,
         topic.concept,
         topic.example,
-        userPreferences // Pass raw preferences, server generates prompt
+        userPreferences
       );
       
       setSessionId(data.sessionId);
       
-      // Create a personalized introduction based on the topic and user preferences
       const introduction = data.message || createPersonalizedIntroduction(topic, selectedLanguage);
       
       const tutorMessage = {
@@ -118,8 +115,8 @@ const App = () => {
       setMessages([tutorMessage]);
       await speakText(introduction);
     } catch (error) {
-      console.error('Error starting topic session:', error);
-      const errorMessage = `I'm sorry, I'm having trouble starting the lesson on ${topic.name}. Let me try again. What would you like to learn?`;
+      console.error('Error starting tutor session:', error);
+      const errorMessage = `I'm sorry, I'm having trouble starting the lesson on ${topic.name}. Let me try again.`;
       
       const errorTutorMessage = {
         id: Date.now().toString(),
@@ -135,7 +132,20 @@ const App = () => {
     }
   };
 
-  // Updated generateResponse - no longer sends system prompt (server uses stored one)
+  // Start Flashcards
+  const handleStartFlashcards = (topic) => {
+    setSelectedTopic(topic);
+    setLearningMode('flashcards');
+    setIsTopicSet(true);
+  };
+
+  // Start Quiz
+  const handleStartQuiz = (topic) => {
+    setSelectedTopic(topic);
+    setLearningMode('quiz');
+    setIsTopicSet(true);
+  };
+
   const generateResponse = async (userInput) => {
     setIsLoading(true);
     try {
@@ -144,14 +154,12 @@ const App = () => {
         content: msg.text
       }));
       
-      // Removed the systemPrompt parameter - server uses the one stored during session start
       const response = await api.sendMessage(
         sessionId, 
         userInput, 
         selectedLanguage, 
         selectedTopic, 
         conversationHistory
-        // No systemPrompt parameter anymore
       );
       
       const assistantMessage = {
@@ -172,20 +180,18 @@ const App = () => {
       setIsLoading(false);
     }
   };
+
   const handleUpdatePreferences = async (newPreferences) => {
     setUserPreferences(newPreferences);
     await AsyncStorage.setItem('userPreferences', JSON.stringify(newPreferences));
-    // Optionally update selected language if changed
     if (newPreferences.targetLanguage !== selectedLanguage) {
       setSelectedLanguage(newPreferences.targetLanguage);
     }
   };
 
   const handleLogout = async () => {
-    // Clear stored user data
     await AsyncStorage.removeItem('userData');
     await AsyncStorage.removeItem('userPreferences');
-    // Reset app state
     setIsAuthenticated(false);
     setHasCompletedQuestionnaire(false);
     setUserData(null);
@@ -193,9 +199,11 @@ const App = () => {
     setSelectedLanguage('Spanish');
     setSelectedTopic(null);
     setIsTopicSet(false);
+    setLearningMode(null);
     setMessages([]);
     setSessionId(null);
   };
+
   // Timer effect
   useEffect(() => {
     if (isCallActive) {
@@ -212,12 +220,10 @@ const App = () => {
     try {
       await Speech.stop();
       
-      // Adjust speech parameters based on proficiency and native language
       let rate = 0.9;
       let pitch = 1.0;
       
       if (userPreferences) {
-        // Slower speech for beginners
         if (userPreferences.proficiencyLevel <= 3) {
           rate = 0.6;
         } else if (userPreferences.proficiencyLevel <= 6) {
@@ -226,7 +232,6 @@ const App = () => {
           rate = 0.9;
         }
         
-        // Slightly higher pitch for certain languages (optional)
         if (userPreferences.targetLanguage === 'Japanese' || userPreferences.targetLanguage === 'Korean') {
           pitch = 1.05;
         }
@@ -281,11 +286,20 @@ const App = () => {
     setIsCallActive(false);
     await api.endSession(sessionId);
     stopSpeaking();
+    handleBackToTopics();
+  };
+  
+  const handleBackToTopics = () => {
     setIsTopicSet(false);
-    setMessages([]);
     setSelectedTopic(null);
+    setLearningMode(null);
+    setMessages([]);
     setSessionId(null);
-    await fetchStats();
+    setInputText('');
+    setIsLoading(false);
+    setIsSpeaking(false);
+    // Refresh stats when returning to topics
+    fetchStats();
     setShowStats(true);
   };
   
@@ -303,24 +317,31 @@ const App = () => {
   if (!isTopicSet) {
     return (
       <TopicSelectionScreen
-      selectedLanguage={selectedLanguage}
-      onSelectLanguage={setSelectedLanguage}
-      onSelectTopic={handleTopicSelect}
-      userStats={userStats}
-      showStats={showStats}
-      onToggleStats={toggleStats}
-      onFetchStats={fetchStats}
-      userPreferences={userPreferences}
-      onUpdatePreferences={handleUpdatePreferences}
-      onLogout={handleLogout}
-    />
+        selectedLanguage={selectedLanguage}
+        onSelectLanguage={setSelectedLanguage}
+        onStartTutor={handleStartTutor}
+        onStartFlashcards={handleStartFlashcards}
+        onStartQuiz={handleStartQuiz}
+        userStats={userStats}
+        showStats={showStats}
+        onToggleStats={toggleStats}
+        onFetchStats={fetchStats}
+        userPreferences={userPreferences}
+        onUpdatePreferences={handleUpdatePreferences}
+        onLogout={handleLogout}
+      />
     );
   }
   
+  // Once a topic is selected, show the LearningScreen with the selected mode
   return (
-    <CallScreen
+    <LearningScreen
+      mode={learningMode}
       selectedLanguage={selectedLanguage}
       selectedTopic={selectedTopic}
+      userPreferences={userPreferences}
+      onBack={handleBackToTopics}
+      // CallScreen props (only used when mode='tutor')
       messages={messages}
       isLoading={isLoading}
       isSpeaking={isSpeaking}
@@ -336,6 +357,11 @@ const App = () => {
       showStats={showStats}
       onToggleStats={toggleStats}
       onFetchStats={fetchStats}
+      sessionId={sessionId}
+      setSessionId={setSessionId}
+      setIsTopicSet={setIsTopicSet}
+      setMessages={setMessages}
+      setSelectedTopic={setSelectedTopic}
     />
   );
 };

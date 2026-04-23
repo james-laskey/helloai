@@ -1,3 +1,5 @@
+// screens/TopicSelectionScreen.js
+
 import React, { useState } from 'react';
 import {
   FlatList,
@@ -10,15 +12,17 @@ import {
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { LanguageDropdown } from '../components/LanguageDropdown';
-import { TopicCard } from '../components/TopicCard';
 import { SettingsModal } from '../components/SettingsModal';
+import { TopicCard } from '../components/TopicCard';
 import { LANGUAGE_TOPICS } from '../constants/languageTopics';
 import { StatsModal } from './StatsModal';
 
 export const TopicSelectionScreen = ({ 
   selectedLanguage, 
   onSelectLanguage, 
-  onSelectTopic, 
+  onStartTutor,
+  onStartFlashcards,
+  onStartQuiz,
   userStats, 
   showStats, 
   onToggleStats,
@@ -31,6 +35,37 @@ export const TopicSelectionScreen = ({
   
   const currentLanguageData = LANGUAGE_TOPICS[selectedLanguage];
   const topics = currentLanguageData?.topics || [];
+
+  // Custom TopicCard wrapper with action buttons
+  const TopicCardWithActions = ({ topic, color }) => (
+    <View style={styles.topicCardWrapper}>
+      {/* Original TopicCard component */}
+      <TopicCard 
+        topic={topic} 
+        languageColor={color} 
+        onPress={onStartTutor}
+      />
+      
+      {/* Action Buttons */}
+      <View style={styles.actionButtons}>
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.flashcardButton]}
+          onPress={() => onStartFlashcards(topic)}
+        >
+          <Ionicons name="card" size={16} color="#fff" />
+          <Text style={styles.actionButtonText}>Flashcards</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.actionButton, styles.quizButton]}
+          onPress={() => onStartQuiz(topic)}
+        >
+          <Ionicons name="help-buoy" size={16} color="#fff" />
+          <Text style={styles.actionButtonText}>Quiz</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -71,10 +106,9 @@ export const TopicSelectionScreen = ({
         data={topics}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
-          <TopicCard 
+          <TopicCardWithActions 
             topic={item} 
-            languageColor={currentLanguageData?.color} 
-            onPress={onSelectTopic}
+            color={currentLanguageData?.color} 
           />
         )}
         showsVerticalScrollIndicator={false}
@@ -144,5 +178,34 @@ const styles = StyleSheet.create({
   topicsList: {
     paddingBottom: 20,
     paddingHorizontal: 16,
+  },
+  topicCardWrapper: {
+    marginBottom: 16,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+    paddingHorizontal: 4,
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 6,
+  },
+  flashcardButton: {
+    backgroundColor: '#FF8C00',
+  },
+  quizButton: {
+    backgroundColor: '#6C67F2',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
 });

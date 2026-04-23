@@ -14,6 +14,8 @@ import {
   Alert
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
+import { authApi } from '../services/authApi';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const AuthScreen = ({ onAuthComplete, onSwitchToSignup, isSignupMode }) => {
   const [email, setEmail] = useState('');
@@ -32,11 +34,21 @@ export const AuthScreen = ({ onAuthComplete, onSwitchToSignup, isSignupMode }) =
 
     setIsLoading(true);
     try {
-      // Simulate API call - replace with your actual auth
-      const userData = { email, name: email.split('@')[0] };
-      onAuthComplete(userData);
+      const response = await authApi.login(email, password);
+      
+      if (response.success) {
+        // Store tokens and user data
+        await AsyncStorage.setItem('accessToken', response.accessToken);
+        await AsyncStorage.setItem('refreshToken', response.refreshToken);
+        await AsyncStorage.setItem('userData', JSON.stringify(response.user));
+        
+        onAuthComplete(response.user);
+      } else {
+        Alert.alert('Login Failed', response.message || 'Invalid credentials');
+      }
     } catch (error) {
-      Alert.alert('Error', 'Login failed. Please try again.');
+      console.error('Login error:', error);
+      Alert.alert('Error', 'Login failed. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -58,11 +70,22 @@ export const AuthScreen = ({ onAuthComplete, onSwitchToSignup, isSignupMode }) =
 
     setIsLoading(true);
     try {
-      // Simulate API call - replace with your actual signup
-      const userData = { email, name };
-      onAuthComplete(userData);
+      const response = await authApi.signup(name, email, password);
+      
+      if (response.success) {
+        // Store tokens and user data
+        await AsyncStorage.setItem('accessToken', response.accessToken);
+        await AsyncStorage.setItem('refreshToken', response.refreshToken);
+        await AsyncStorage.setItem('userData', JSON.stringify(response.user));
+        
+        Alert.alert('Success', 'Account created successfully!');
+        onAuthComplete(response.user);
+      } else {
+        Alert.alert('Signup Failed', response.message || 'Could not create account');
+      }
     } catch (error) {
-      Alert.alert('Error', 'Signup failed. Please try again.');
+      console.error('Signup error:', error);
+      Alert.alert('Error', 'Signup failed. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
@@ -70,9 +93,10 @@ export const AuthScreen = ({ onAuthComplete, onSwitchToSignup, isSignupMode }) =
 
   const toggleMode = () => {
     setMode(mode === 'login' ? 'signup' : 'login');
-    // Clear form when switching modes
     setPassword('');
     setConfirmPassword('');
+    setEmail('');
+    setName('');
   };
 
   return (
