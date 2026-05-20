@@ -157,5 +157,56 @@ export const learningApi = {
       console.error('Update mastery error:', error);
       throw error;
     }
+  },
+ 
+
+getPreviousFlashcardSets: async (data) => {
+  try {
+    const response = await authenticatedFetch(`${LEARNING_API_URL}/flashcard-sets`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Get previous flashcard sets error:', error);
+    throw error;
   }
+},
+
+getPreviousQuizAttempts: async (data) => {
+  try {
+    const response = await authenticatedFetch(`${LEARNING_API_URL}/quiz-attempts`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Get previous quiz attempts error:', error);
+    throw error;
+  }
+},
+
+getFlashcardSetById: async (id) => {
+  try {
+    const response = await authenticatedFetch(`${LEARNING_API_URL}/flashcard-sets/${id}`, {
+      method: 'GET'
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Get flashcard set error:', error);
+    throw error;
+  }
+},
+
+getQuizAttemptById: async (id) => {
+  try {
+    const response = await authenticatedFetch(`${LEARNING_API_URL}/quiz-attempts/${id}`, {
+      method: 'GET'
+    });
+    return await response.json();
+  } catch (error) {
+    console.error('Get quiz attempt error:', error);
+    throw error;
+  }
+},
 };

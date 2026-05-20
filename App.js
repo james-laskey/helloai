@@ -272,7 +272,7 @@ const App = () => {
   const fetchStats = async () => {
     if (!userId) return;
     console.log('Fetching stats for userId:', userId);
-    const stats = await api.fetchStats(sessionId, userId);
+    const stats = await api.fetchStats(userId);
     console.log('Stats received:', stats);
     setUserStats(stats);
   };

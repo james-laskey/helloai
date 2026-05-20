@@ -1,15 +1,17 @@
-// screens/LearningScreen.js - Fixed version with updateMastery
+// screens/LearningScreen.js
 
 import React, { useState, useEffect } from 'react';
 import {
   View,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   TouchableOpacity,
   Text,
-  ActivityIndicator
+  ActivityIndicator,
+  FlatList,
+  Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { CallScreen } from './CallScreen';
 import { FlashcardComponent } from '../components/FlashcardComponent';
@@ -22,7 +24,7 @@ export const LearningScreen = ({
   selectedTopic,
   userPreferences,
   onBack,
-  // CallScreen props (only for mode='tutor')
+  // CallScreen props
   messages,
   isLoading,
   isSpeaking,
@@ -49,15 +51,86 @@ export const LearningScreen = ({
   const [loading, setLoading] = useState(false);
   const [flashcardSetId, setFlashcardSetId] = useState(null);
   const [quizAttemptId, setQuizAttemptId] = useState(null);
+  const [submittedQuiz, setSubmittedQuiz] = useState(false);
+  const [submittedFlashcards, setSubmittedFlashcards] = useState(false);
+  
+  // New states for previous datasets
+  const [previousFlashcardSets, setPreviousFlashcardSets] = useState([]);
+  const [previousQuizAttempts, setPreviousQuizAttempts] = useState([]);
+  const [showDatasetSelector, setShowDatasetSelector] = useState(false);
+  const [selectedDataset, setSelectedDataset] = useState(null);
+  const [loadingPrevious, setLoadingPrevious] = useState(false);
 
+  // Fetch previous datasets when component mounts
   useEffect(() => {
-    if (mode === 'flashcards' && !flashcards && !loading) {
-      generateFlashcards();
-    }
-    if (mode === 'quiz' && !quiz && !loading) {
-      generateQuiz();
+    if (mode === 'flashcards') {
+      fetchPreviousFlashcardSets();
+    } else if (mode === 'quiz') {
+      fetchPreviousQuizAttempts();
     }
   }, [mode]);
+
+  const fetchPreviousFlashcardSets = async () => {
+    setLoadingPrevious(true);
+    try {
+      const result = await learningApi.getPreviousFlashcardSets({
+        userId: userPreferences?.id || 'anonymous',
+        topicId: selectedTopic.id,
+        language: selectedLanguage
+      });
+      if (result && result.sets) {
+        setPreviousFlashcardSets(result.sets);
+      }
+    } catch (error) {
+      console.error('Error fetching previous flashcard sets:', error);
+    } finally {
+      setLoadingPrevious(false);
+    }
+  };
+
+  const fetchPreviousQuizAttempts = async () => {
+    setLoadingPrevious(true);
+    try {
+      const result = await learningApi.getPreviousQuizAttempts({
+        userId: userPreferences?.id || 'anonymous',
+        topicId: selectedTopic.id,
+        language: selectedLanguage
+      });
+      if (result && result.quizzes) {
+        setPreviousQuizAttempts(result.quizzes);
+      }
+    } catch (error) {
+      console.error('Error fetching previous quiz attempts:', error);
+    } finally {
+      setLoadingPrevious(false);
+    }
+  };
+
+  const handleUsePreviousFlashcardSet = (set) => {
+    setFlashcards(set.cards);
+    setFlashcardSetId(set.id);
+    setSelectedDataset(set);
+    setShowDatasetSelector(false);
+  };
+
+  const handleUsePreviousQuiz = (quizData) => {
+    setQuiz(quizData.questions);
+    setQuizAttemptId(quizData.id);
+    setSelectedDataset(quizData);
+    setShowDatasetSelector(false);
+  };
+
+  const handleGenerateNew = () => {
+    setSelectedDataset(null);
+    setShowDatasetSelector(false);
+    if (mode === 'flashcards') {
+      setFlashcards(null);
+      generateFlashcards();
+    } else if (mode === 'quiz') {
+      setQuiz(null);
+      generateQuiz();
+    }
+  };
 
   const generateFlashcards = async () => {
     setLoading(true);
@@ -77,8 +150,8 @@ export const LearningScreen = ({
       if (result && result.flashcards) {
         setFlashcards(result.flashcards);
         setFlashcardSetId(result.setId);
-      } else {
-        console.error('No flashcards in response:', result);
+        // Refresh the list of previous sets
+        fetchPreviousFlashcardSets();
       }
     } catch (error) {
       console.error('Error generating flashcards:', error);
@@ -102,6 +175,8 @@ export const LearningScreen = ({
       if (result && result.quiz) {
         setQuiz(result.quiz);
         setQuizAttemptId(result.attemptId);
+        // Refresh the list of previous quizzes
+        fetchPreviousQuizAttempts();
       }
     } catch (error) {
       console.error('Error generating quiz:', error);
@@ -110,9 +185,29 @@ export const LearningScreen = ({
     }
   };
 
-  // Update flashcard mastery when user marks a card as known/unknown
+  const submitQuizResults = async (answers, score, total) => {
+    if (!quizAttemptId || submittedQuiz) return;
+    
+    setSubmittedQuiz(true);
+    try {
+      const result = await learningApi.submitQuiz({
+        attemptId: quizAttemptId,
+        userId: userPreferences?.id || 'anonymous',
+        topicId: selectedTopic.id,
+        answers: answers.map(a => a.selected),
+        timeSpent: 0
+      });
+      console.log('Quiz submitted successfully:', result);
+      setQuiz(null);
+      // Refresh previous quizzes after submission
+      fetchPreviousQuizAttempts();
+    } catch (error) {
+      console.error('Error submitting quiz:', error);
+    }
+  };
+
   const updateFlashcardMastery = async (cardIndex, known) => {
-    if (!flashcardSetId) return;
+    if (!flashcardSetId || submittedFlashcards) return;
     
     try {
       await learningApi.updateFlashcardMastery({
@@ -128,24 +223,33 @@ export const LearningScreen = ({
     }
   };
 
-  const handleFlashcardComplete = (knownCount, totalCount) => {
-    console.log(`Flashcard session completed! Known: ${knownCount}/${totalCount}`);
-    // Refresh stats after completing flashcards
-    if (onFetchStats) {
-      onFetchStats();
+  const submitFlashcardCompletion = async (knownCount, totalCount) => {
+    if (!flashcardSetId || submittedFlashcards) return;
+    
+    setSubmittedFlashcards(true);
+    try {
+      console.log(`Flashcard session completed: ${knownCount}/${totalCount} known`);
+      setFlashcards(null);
+      // Refresh previous flashcard sets after completion
+      fetchPreviousFlashcardSets();
+    } catch (error) {
+      console.error('Error submitting flashcard completion:', error);
     }
+  };
+
+  const handleFlashcardComplete = async (knownCount, totalCount) => {
+    console.log(`Flashcard session completed! Known: ${knownCount}/${totalCount}`);
+    await submitFlashcardCompletion(knownCount, totalCount);
     setTimeout(() => {
-      onBack(); // This will return to TopicSelectionScreen
+      onBack();
     }, 1500);
   };
 
-  const handleQuizComplete = (score, total) => {
+  const handleQuizComplete = async (score, total, answers) => {
     console.log(`Quiz complete! Score: ${score}/${total}`);
-    if (onFetchStats) {
-      onFetchStats();
-    }
+    await submitQuizResults(answers, score, total);
     setTimeout(() => {
-      onBack(); // This will return to TopicSelectionScreen
+      onBack();
     }, 1500);
   };
 
@@ -154,6 +258,114 @@ export const LearningScreen = ({
       onEndCall();
     }
     onBack();
+  };
+
+  // Render dataset selector for flashcards
+  const renderFlashcardDatasetSelector = () => {
+    if (previousFlashcardSets.length === 0 && !loadingPrevious) {
+      return (
+        <View style={styles.selectorContainer}>
+          <Text style={styles.selectorTitle}>No previous flashcards found</Text>
+          <Text style={styles.selectorSubtitle}>Generate your first set to get started!</Text>
+          <TouchableOpacity style={styles.generateButton} onPress={generateFlashcards}>
+            <Ionicons name="add-circle" size={24} color="#fff" />
+            <Text style={styles.generateButtonText}>Generate New Flashcards</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.selectorContainer}>
+        <Text style={styles.selectorTitle}>Choose a Flashcard Set</Text>
+        <Text style={styles.selectorSubtitle}>Select from your previous sets or create a new one</Text>
+        
+        <FlatList
+          data={previousFlashcardSets}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.datasetCard}
+              onPress={() => handleUsePreviousFlashcardSet(item)}
+            >
+              <View style={styles.datasetCardHeader}>
+                <Ionicons name="card" size={24} color="#53C691" />
+                <Text style={styles.datasetCardTitle}>{item.title || `${selectedTopic.name} Flashcards`}</Text>
+              </View>
+              <View style={styles.datasetCardStats}>
+                <Text style={styles.datasetCardStat}>📇 {item.cards?.length || 0} cards</Text>
+                <Text style={styles.datasetCardStat}>📊 Mastery: {Math.round(item.masteryLevel || 0)}%</Text>
+                <Text style={styles.datasetCardStat}>🔄 Reviewed: {item.timesReviewed || 0} times</Text>
+              </View>
+              <Text style={styles.datasetCardDate}>
+                Created: {new Date(item.createdAt).toLocaleDateString()}
+              </Text>
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={styles.datasetList}
+        />
+        
+        <TouchableOpacity style={styles.generateButton} onPress={handleGenerateNew}>
+          <Ionicons name="add-circle" size={24} color="#fff" />
+          <Text style={styles.generateButtonText}>Generate New Set</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  // Render dataset selector for quizzes
+  const renderQuizDatasetSelector = () => {
+    if (previousQuizAttempts.length === 0 && !loadingPrevious) {
+      return (
+        <View style={styles.selectorContainer}>
+          <Text style={styles.selectorTitle}>No previous quizzes found</Text>
+          <Text style={styles.selectorSubtitle}>Generate your first quiz to get started!</Text>
+          <TouchableOpacity style={styles.generateButton} onPress={generateQuiz}>
+            <Ionicons name="add-circle" size={24} color="#fff" />
+            <Text style={styles.generateButtonText}>Generate New Quiz</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.selectorContainer}>
+        <Text style={styles.selectorTitle}>Choose a Quiz</Text>
+        <Text style={styles.selectorSubtitle}>Select from your previous quizzes or create a new one</Text>
+        
+        <FlatList
+          data={previousQuizAttempts}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.datasetCard}
+              onPress={() => handleUsePreviousQuiz(item)}
+            >
+              <View style={styles.datasetCardHeader}>
+                <Ionicons name="help-buoy" size={24} color="#FF8C00" />
+                <Text style={styles.datasetCardTitle}>{item.title || `${selectedTopic.name} Quiz`}</Text>
+              </View>
+              <View style={styles.datasetCardStats}>
+                <Text style={styles.datasetCardStat}>📝 {item.totalQuestions || 0} questions</Text>
+                {item.score !== null && (
+                  <Text style={styles.datasetCardStat}>⭐ Score: {item.score}%</Text>
+                )}
+                <Text style={styles.datasetCardStat}>🎯 Correct: {item.correctCount || 0}</Text>
+              </View>
+              <Text style={styles.datasetCardDate}>
+                {item.completedAt ? `Completed: ${new Date(item.completedAt).toLocaleDateString()}` : `Created: ${new Date(item.createdAt).toLocaleDateString()}`}
+              </Text>
+            </TouchableOpacity>
+          )}
+          contentContainerStyle={styles.datasetList}
+        />
+        
+        <TouchableOpacity style={styles.generateButton} onPress={handleGenerateNew}>
+          <Ionicons name="add-circle" size={24} color="#fff" />
+          <Text style={styles.generateButtonText}>Generate New Quiz</Text>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   const renderContent = () => {
@@ -182,6 +394,20 @@ export const LearningScreen = ({
     }
 
     if (mode === 'flashcards') {
+      // Show dataset selector if no flashcards loaded and not loading
+      if (!flashcards && !loading && !showDatasetSelector) {
+        setShowDatasetSelector(true);
+      }
+      
+      if (showDatasetSelector && !flashcards) {
+        return loadingPrevious ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#53C691" />
+            <Text style={styles.loadingText}>Loading your flashcards...</Text>
+          </View>
+        ) : renderFlashcardDatasetSelector();
+      }
+      
       if (loading) {
         return (
           <View style={styles.centerContainer}>
@@ -190,6 +416,7 @@ export const LearningScreen = ({
           </View>
         );
       }
+      
       if (flashcards && flashcards.length > 0) {
         return (
           <FlashcardComponent 
@@ -199,22 +426,25 @@ export const LearningScreen = ({
           />
         );
       }
-      // Show error or empty state
-      return (
-        <View style={styles.centerContainer}>
-          <Ionicons name="card-outline" size={48} color="rgba(255,255,255,0.5)" />
-          <Text style={styles.loadingText}>No flashcards available</Text>
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={generateFlashcards}
-          >
-            <Text style={styles.retryButtonText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      );
+      
+      return null;
     }
 
     if (mode === 'quiz') {
+      // Show dataset selector if no quiz loaded and not loading
+      if (!quiz && !loading && !showDatasetSelector) {
+        setShowDatasetSelector(true);
+      }
+      
+      if (showDatasetSelector && !quiz) {
+        return loadingPrevious ? (
+          <View style={styles.centerContainer}>
+            <ActivityIndicator size="large" color="#53C691" />
+            <Text style={styles.loadingText}>Loading your quizzes...</Text>
+          </View>
+        ) : renderQuizDatasetSelector();
+      }
+      
       if (loading) {
         return (
           <View style={styles.centerContainer}>
@@ -223,27 +453,21 @@ export const LearningScreen = ({
           </View>
         );
       }
+      
       if (quiz && quiz.length > 0) {
         return (
           <QuizComponent 
             quiz={quiz} 
-            onSubmit={() => {}} 
-            onComplete={handleQuizComplete} 
+            onSubmit={submitQuizResults}
+            onComplete={handleQuizComplete}
+            attemptId={quizAttemptId}
+            userId={userPreferences?.id}
+            topicId={selectedTopic.id}
           />
         );
       }
-      return (
-        <View style={styles.centerContainer}>
-          <Ionicons name="help-buoy-outline" size={48} color="rgba(255,255,255,0.5)" />
-          <Text style={styles.loadingText}>No quiz available</Text>
-          <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={generateQuiz}
-          >
-            <Text style={styles.retryButtonText}>Try Again</Text>
-          </TouchableOpacity>
-        </View>
-      );
+      
+      return null;
     }
 
     return null;
@@ -305,14 +529,71 @@ const styles = StyleSheet.create({
     marginTop: 12,
     textAlign: 'center',
   },
-  retryButton: {
-    marginTop: 20,
-    backgroundColor: '#53C691',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 30,
+  selectorContainer: {
+    flex: 1,
+    padding: 20,
   },
-  retryButtonText: {
+  selectorTitle: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  selectorSubtitle: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  datasetList: {
+    paddingBottom: 20,
+  },
+  datasetCard: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+  },
+  datasetCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 12,
+  },
+  datasetCardTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    flex: 1,
+  },
+  datasetCardStats: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 8,
+  },
+  datasetCardStat: {
+    color: '#aaa',
+    fontSize: 12,
+  },
+  datasetCardDate: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: 8,
+  },
+  generateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#53C691',
+    borderRadius: 30,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    marginTop: 20,
+    gap: 8,
+  },
+  generateButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

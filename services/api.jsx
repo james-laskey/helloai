@@ -106,7 +106,7 @@ export const api = {
   },
 
   // Send message
-  sendMessage: async (sessionId,userId, message, language, topic, conversationHistory) => {
+  sendMessage: async (sessionId, userId, message, language, topic, conversationHistory) => {
     try {
       const response = await authenticatedFetch(`${API_URL}/api/chat`, {
         method: 'POST',
@@ -203,24 +203,22 @@ export const api = {
       throw error;
     }
   },
+
   updateSessionActivity: async (sessionId, data) => {
     try {
-        const token = await AsyncStorage.getItem('accessToken');
-        const response = await fetch(`${API_URL}/api/session/activity`, {
+      // ✅ Fixed: Use authenticatedFetch instead of direct fetch
+      const response = await authenticatedFetch(`${API_URL}/api/session/activity`, {
         method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': token ? `Bearer ${token}` : ''
-        },
         body: JSON.stringify({ 
-            sessionId, 
-            messageCount: data.messageCount,
-            duration: data.duration
+          sessionId, 
+          messageCount: data.messageCount,
+          duration: data.duration
         })
-        });
-        return response.json();
+      });
+      return await response.json();
     } catch (error) {
-        console.error('Update session activity error:', error);
+      console.error('Update session activity error:', error);
+      return null;
     }
-    }
+  }
 };

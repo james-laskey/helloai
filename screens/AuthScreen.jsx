@@ -6,13 +6,13 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { authApi } from '../services/authApi';
 import AsyncStorage from '@react-native-async-storage/async-storage';

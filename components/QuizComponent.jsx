@@ -105,7 +105,7 @@ export const QuizComponent = ({ quiz, onSubmit, onComplete }) => {
           ))}
         </ScrollView>
         
-        <TouchableOpacity style={styles.doneButton} onPress={() => onComplete(score, totalQuestions)}>
+        <TouchableOpacity style={styles.doneButton} onPress={() => onComplete(score, totalQuestions, answers)}>
           <Text style={styles.doneButtonText}>Continue Learning</Text>
         </TouchableOpacity>
       </View>

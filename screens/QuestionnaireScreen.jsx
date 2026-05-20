@@ -4,11 +4,11 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   ScrollView,
   Alert
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LANGUAGE_TOPICS } from '../constants/languageTopics';
 import Ionicons from '@react-native-vector-icons/ionicons';
 

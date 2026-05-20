@@ -11,7 +11,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 
 export const TopicCard = ({ topic, languageColor, onPress }) => (
   <TouchableOpacity 
-    style={[styles.topicCard, { borderLeftColor: languageColor || '#53C691' }]}
+    style={[styles.topicCard]}
     onPress={() => onPress(topic)}
     activeOpacity={0.7}
   >
@@ -41,11 +41,9 @@ export const TopicCard = ({ topic, languageColor, onPress }) => (
 
 const styles = StyleSheet.create({
   topicCard: {
-    backgroundColor: '#1a1a1a',
+    backgroundColor: '#fff',
     borderRadius: 16,
     padding: 16,
-    borderLeftWidth: 4,
-    borderLeftColor: '#53C691',
   },
   topicHeader: {
     flexDirection: 'row',
@@ -71,13 +69,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   topicName: {
-    color: '#fff',
+    color: '#333',
     fontSize: 18,
     fontWeight: 'bold',
     marginBottom: 8,
   },
   topicDescription: {
-    color: '#ccc',
+    color: '#C3C3C3',
     fontSize: 14,
     lineHeight: 20,
     marginBottom: 12,

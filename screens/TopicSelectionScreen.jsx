@@ -3,13 +3,14 @@
 import React, { useState } from 'react';
 import {
   FlatList,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
   View,
-  TouchableOpacity
+  TouchableOpacity,
+  ActivityIndicator
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@react-native-vector-icons/ionicons';
 import { LanguageDropdown } from '../components/LanguageDropdown';
 import { SettingsModal } from '../components/SettingsModal';
@@ -32,14 +33,24 @@ export const TopicSelectionScreen = ({
   onLogout
 }) => {
   const [showSettings, setShowSettings] = useState(false);
+  const [isLoadingStats, setIsLoadingStats] = useState(false);
   
   const currentLanguageData = LANGUAGE_TOPICS[selectedLanguage];
   const topics = currentLanguageData?.topics || [];
+  
   const handleStatsPress = async () => {
     console.log('Fetching stats...');
-    await onFetchStats(); // Fetch latest data
-    onToggleStats(); // Then show modal
+    setIsLoadingStats(true); // Show loading indicator
+    try {
+      await onFetchStats(); // Fetch latest data
+      onToggleStats(); // Then show modal
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+    } finally {
+      setIsLoadingStats(false); // Hide loading indicator
+    }
   };
+  
   // Custom TopicCard wrapper with action buttons
   const TopicCardWithActions = ({ topic, color }) => (
     <View style={styles.topicCardWrapper}>
@@ -87,9 +98,19 @@ export const TopicSelectionScreen = ({
       <View style={styles.topBar}>
         <LanguageDropdown selectedLanguage={selectedLanguage} onSelectLanguage={onSelectLanguage} />
         <View style={styles.topBarRight}>
-          <TouchableOpacity onPress={handleStatsPress} style={styles.iconButton}>
-            <Ionicons name="stats-chart" size={22} color="#fff" />
+          {/* Stats Button with Loading Indicator */}
+          <TouchableOpacity 
+            onPress={handleStatsPress} 
+            style={styles.iconButton}
+            disabled={isLoadingStats}
+          >
+            {isLoadingStats ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Ionicons name="stats-chart" size={22} color="#fff" />
+            )}
           </TouchableOpacity>
+          
           <TouchableOpacity onPress={() => setShowSettings(true)} style={styles.iconButton}>
             <Ionicons name="settings-outline" size={22} color="#fff" />
           </TouchableOpacity>
@@ -99,9 +120,6 @@ export const TopicSelectionScreen = ({
       <View style={styles.headerSection}>
         <View style={styles.languageHeader}>
           <Text style={styles.languageHeaderIcon}>{currentLanguageData?.icon}</Text>
-          <Text style={styles.languageHeaderTitle}>{selectedLanguage}</Text>
-        </View>
-        <View style={styles.logoContainer}>
           <Text style={styles.subtitle}>Choose a topic to practice</Text>
         </View>
       </View>
@@ -156,7 +174,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     marginTop: 10,
-    marginBottom: 5,
   },
   languageHeaderIcon: {
     fontSize: 32,
@@ -202,13 +219,13 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   flashcardButton: {
-    backgroundColor: '#FF8C00',
+    backgroundColor: '#D9D9D9',
   },
   quizButton: {
-    backgroundColor: '#6C67F2',
+    backgroundColor: '#53C691',
   },
   actionButtonText: {
-    color: '#fff',
+    color: '#333',
     fontSize: 12,
     fontWeight: '600',
   },

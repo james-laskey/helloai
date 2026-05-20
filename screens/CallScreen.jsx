@@ -1,3 +1,5 @@
+// screens/CallScreen.js
+
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -5,7 +7,6 @@ import {
   Dimensions,
   KeyboardAvoidingView,
   Platform,
-  SafeAreaView,
   StatusBar,
   StyleSheet,
   Text,
@@ -14,19 +15,22 @@ import {
   View,
   ScrollView,
   Alert,
-  PermissionsAndroid
+  PermissionsAndroid,
+  Keyboard
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Speech from 'expo-speech';
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
 } from 'expo-speech-recognition';
 import Ionicons from '@react-native-vector-icons/ionicons';
+import { FloatingTextInput } from '../components/FloatingTextInput';
 import { LANGUAGE_TOPICS } from '../constants/languageTopics';
 import { formatDuration, getLanguageSpeechCode } from '../utils/helpers';
 import { StatsModal } from './StatsModal';
 
-const { height } = Dimensions.get('window');
+const { height, width } = Dimensions.get('window');
 
 export const CallScreen = ({ 
   selectedLanguage, 
@@ -47,51 +51,58 @@ export const CallScreen = ({
   onToggleStats,
   onFetchStats
 }) => {
+  const isMounted = useRef(true);
   const speakingAnimation = useRef(new Animated.Value(1)).current;
   const scrollViewRef = useRef();
   
   const [isListening, setIsListening] = useState(false);
   const [isVoiceSupported, setIsVoiceSupported] = useState(true);
   const [transcript, setTranscript] = useState('');
+  const [isTextInputVisible, setIsTextInputVisible] = useState(false);
   
   // Speech recognition language code
   const speechLanguage = getLanguageSpeechCode(selectedLanguage);
 
   // Set up speech recognition event listeners
   useSpeechRecognitionEvent('start', () => {
+    if (!isMounted.current) return;
     console.log('Speech recognition started');
     setIsListening(true);
   });
 
   useSpeechRecognitionEvent('end', () => {
+    if (!isMounted.current) return;
     console.log('Speech recognition ended');
     setIsListening(false);
   });
 
   useSpeechRecognitionEvent('result', (event) => {
+    if (!isMounted.current) return;
     const resultText = event.results[0]?.transcript;
     if (resultText) {
       setTranscript(resultText);
       onInputChange(resultText);
-      
-      // Auto-send after speech ends
-      if (event.isFinal) {
-        setTimeout(() => {
-          if (resultText.trim() && !isLoading) {
-            onSendMessage();
-          }
-        }, 500);
-      }
     }
   });
 
   useSpeechRecognitionEvent('error', (event) => {
+    if (!isMounted.current) return;
     console.log('Speech error:', event.error, event.message);
     setIsListening(false);
   });
 
+  // Clean up on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      Speech.stop();
+      ExpoSpeechRecognitionModule.abort();
+    };
+  }, []);
+
   // Request microphone permission
   const requestMicrophonePermission = async () => {
+    if (!isMounted.current) return;
     if (Platform.OS === 'android') {
       try {
         const granted = await PermissionsAndroid.request(
@@ -117,6 +128,7 @@ export const CallScreen = ({
 
   // Start listening for voice input
   const startListening = async () => {
+    if (!isMounted.current) return;
     if (!isVoiceSupported || isMuted || isLoading || isSpeaking || isListening) return;
     
     const permission = await ExpoSpeechRecognitionModule.requestPermissionsAsync();
@@ -128,35 +140,25 @@ export const CallScreen = ({
     ExpoSpeechRecognitionModule.start({
       lang: speechLanguage,
       interimResults: true,
-      continuous: false, // Auto-stops after silence
+      continuous: false,
     });
   };
 
   // Stop listening
   const stopListening = () => {
+    if (!isMounted.current) return;
     if (!isListening) return;
     ExpoSpeechRecognitionModule.stop();
   };
-
-  // Auto-start listening when tutor finishes speaking
-  useEffect(() => {
-    if (!isSpeaking && !isLoading && !isMuted && !isListening && isVoiceSupported) {
-      const timer = setTimeout(startListening, 500);
-      return () => clearTimeout(timer);
-    }
-    
-    if (isSpeaking && isListening) {
-      stopListening();
-    }
-  }, [isSpeaking, isLoading, isMuted, isVoiceSupported]);
 
   // Request permissions on mount
   useEffect(() => {
     requestMicrophonePermission();
   }, []);
 
-  // Manual voice toggle (for mute button override)
+  // Manual voice toggle
   const handleManualVoiceToggle = async () => {
+    if (!isMounted.current) return;
     if (isListening) {
       await stopListening();
     } else {
@@ -164,23 +166,44 @@ export const CallScreen = ({
     }
   };
 
-  // Handle manual message send (disables listening temporarily)
+  // Handle manual message send
   const handleSendMessage = async () => {
+    if (!isMounted.current) return;
+    
     if (isListening) {
       await stopListening();
     }
-    onSendMessage();
     
-    // Resume listening after tutor responds
-    setTimeout(() => {
-      if (!isSpeaking && !isLoading && !isMuted) {
-        startListening();
-      }
-    }, 1000);
+    onSendMessage();
+    setIsTextInputVisible(false);
+  };
+
+  // Handle text input change
+  const handleInputChange = (text) => {
+    if (!isMounted.current) return;
+    onInputChange(text);
+  };
+
+  // Repeat the last tutor message
+  const repeatLastTutorMessage = async () => {
+    if (!isMounted.current) return;
+    
+    // Find the last tutor message (assistant)
+    const lastTutorMessage = [...messages].reverse().find(msg => !msg.isUser);
+    
+    if (lastTutorMessage && lastTutorMessage.text) {
+      await Speech.stop();
+      await Speech.speak(lastTutorMessage.text, {
+        language: getLanguageSpeechCode(selectedLanguage),
+        pitch: 1.0,
+        rate: 0.9,
+      });
+    }
   };
 
   // Speaking animation
   useEffect(() => {
+    if (!isMounted.current) return;
     if (isSpeaking) {
       Animated.loop(
         Animated.sequence([
@@ -195,15 +218,13 @@ export const CallScreen = ({
 
   // Auto-scroll when new messages arrive
   useEffect(() => {
+    if (!isMounted.current) return;
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 100);
   }, [messages]);
 
-  // Clean up on unmount
-  useEffect(() => {
-    return () => {
-      ExpoSpeechRecognitionModule.abort();
-    };
-  }, []);
+  // Find the last tutor message to determine if repeat button should be shown
+  const lastTutorMessage = [...messages].reverse().find(msg => !msg.isUser);
+  const shouldShowRepeatButton = lastTutorMessage && !isLoading && !isSpeaking;
 
   return (
     <SafeAreaView style={styles.callContainer}>
@@ -227,15 +248,6 @@ export const CallScreen = ({
           </TouchableOpacity>
         </View>
         
-        {/* Voice Listening Indicator */}
-        {isListening && !isMuted && !isLoading && (
-          <View style={styles.listeningIndicator}>
-            <Animated.View style={styles.listeningPulse} />
-            <Ionicons name="mic" size={20} color="#53C691" />
-            <Text style={styles.listeningText}>Listening...</Text>
-          </View>
-        )}
-        
         <View style={styles.videoContainer}>
           <View style={styles.tutorVideoFrame}>
             <Animated.View style={[styles.tutorAvatarContainer, { transform: [{ scale: speakingAnimation }] }]}>
@@ -245,19 +257,45 @@ export const CallScreen = ({
             </Animated.View>
             <Text style={styles.tutorName}>{selectedLanguage} Tutor</Text>
             <Text style={styles.topicFocus}>Focus: {selectedTopic?.name}</Text>
-            <Text style={styles.tutorStatus}>
-              {isSpeaking ? '🔴 Speaking' : isLoading ? '🤔 Thinking...' : isListening ? '🎙️ Listening to you...' : '🎧 Ready to listen'}
-            </Text>
-          </View>
-          
-          <View style={styles.selfView}>
-            <View style={[styles.selfAvatar, isListening && styles.selfAvatarListening]}>
-              <Text style={styles.selfAvatarEmoji}>{isListening ? '🎙️' : '👤'}</Text>
-            </View>
-            <Text style={styles.selfName}>{isListening ? 'Speaking...' : 'You'}</Text>
           </View>
         </View>
         
+        {/* Fixed Control Buttons Column */}
+        <View style={styles.controlButtonsColumn}>
+          <TouchableOpacity
+            style={[styles.controlColumnButton, isMuted && styles.activeButton]}
+            onPress={onToggleMute}
+          >
+            <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color="#fff" />
+            <Text style={styles.controlColumnLabel}>{isMuted ? "Muted" : "Mute"}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.controlColumnButton, isListening && styles.activeButton]}
+            onPress={handleManualVoiceToggle}
+          >
+            <Ionicons name={isListening ? "stop-circle" : "mic-circle"} size={24} color="#fff" />
+            <Text style={styles.controlColumnLabel}>{isListening ? "Stop" : "Voice"}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.controlColumnButton}
+            onPress={onStopSpeaking}
+          >
+            <Ionicons name="volume-high" size={24} color="#fff" />
+            <Text style={styles.controlColumnLabel}>Volume</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.controlColumnButton, styles.endCallColumnButton]}
+            onPress={onEndCall}
+          >
+            <Ionicons name="call" size={24} color="#fff" />
+            <Text style={styles.controlColumnLabel}>End</Text>
+          </TouchableOpacity>
+        </View>
+        
+        {/* Taller Transcript Box */}
         <View style={styles.captionsContainer}>
           <View style={styles.captionsHeader}>
             <Ionicons name="chatbubbles" size={16} color="#888" />
@@ -270,18 +308,45 @@ export const CallScreen = ({
             )}
           </View>
           
-          <ScrollView ref={scrollViewRef} style={styles.transcriptScroll} contentContainerStyle={styles.transcriptContent}>
-            {messages.map((message) => (
-              <View key={message.id} style={[styles.transcriptMessage, message.isUser ? styles.userTranscript : styles.tutorTranscript]}>
-                <View style={styles.messageHeader}>
-                  <Text style={styles.messageSpeaker}>{message.isUser ? 'You' : selectedLanguage + ' Tutor'}</Text>
-                  <Text style={styles.messageTime}>
-                    {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </Text>
-                </View>
-                <Text style={styles.messageText}>{message.text}</Text>
+          <ScrollView 
+            ref={scrollViewRef} 
+            style={styles.transcriptScroll} 
+            contentContainerStyle={styles.transcriptContent}
+            showsVerticalScrollIndicator={true}
+          >
+            {messages.length === 0 ? (
+              <View style={styles.emptyTranscript}>
+                <Text style={styles.emptyTranscriptText}>Tap the Voice button and start speaking to begin!</Text>
               </View>
-            ))}
+            ) : (
+              messages.map((message, index) => {
+                const isLastTutorMessage = !message.isUser && index === messages.length - 1;
+                return (
+                  <View key={message.id}>
+                    <View style={[styles.transcriptMessage, message.isUser ? styles.userTranscript : styles.tutorTranscript]}>
+                      <View style={styles.messageHeader}>
+                        <Text style={styles.messageSpeaker}>{message.isUser ? 'You' : selectedLanguage + ' Tutor'}</Text>
+                        <Text style={styles.messageTime}>
+                          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+                      <Text style={styles.messageText}>{message.text}</Text>
+                    </View>
+                    {/* Repeat button for the last tutor message */}
+                    {isLastTutorMessage && !message.isUser && shouldShowRepeatButton && (
+                      <TouchableOpacity 
+                        style={styles.repeatButton}
+                        onPress={repeatLastTutorMessage}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons name="repeat-outline" size={16} color="#53C691" />
+                        <Text style={styles.repeatButtonText}>Repeat</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                );
+              })
+            )}
             {isLoading && (
               <View style={styles.typingIndicator}>
                 <Text style={styles.typingText}>Tutor is typing...</Text>
@@ -290,64 +355,15 @@ export const CallScreen = ({
             )}
           </ScrollView>
         </View>
-        
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}>
-          <View style={styles.controlsContainer}>
-            <View style={styles.controlButtons}>
-              <TouchableOpacity style={styles.controlButton} onPress={onToggleMute}>
-                <View style={[styles.controlIcon, isMuted && styles.controlIconActive]}>
-                  <Ionicons name={isMuted ? "mic-off" : "mic"} size={24} color={isMuted ? "#ff4444" : "#fff"} />
-                </View>
-                <Text style={styles.controlLabel}>{isMuted ? "Unmute" : "Mute"}</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.controlButton} onPress={handleManualVoiceToggle}>
-                <View style={[styles.controlIcon, isListening && styles.controlIconListening]}>
-                  <Ionicons name={isListening ? "stop-circle" : "ear"} size={24} color="#fff" />
-                </View>
-                <Text style={styles.controlLabel}>{isListening ? "Stop Listen" : "Voice"}</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.controlButton} onPress={onStopSpeaking}>
-                <View style={styles.controlIcon}>
-                  <Ionicons name="volume-high" size={24} color="#fff" />
-                </View>
-                <Text style={styles.controlLabel}>Volume</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.endCallControl} onPress={onEndCall}>
-                <View style={styles.endCallIcon}>
-                  <Ionicons name="call" size={28} color="#fff" />
-                </View>
-                <Text style={styles.endCallLabel}>End</Text>
-              </TouchableOpacity>
-            </View>
-            
-            <View style={styles.messageInputContainer}>
-              <TextInput
-                style={styles.messageInput}
-                value={inputText}
-                onChangeText={onInputChange}
-                placeholder={isListening ? "Voice input active... speak now" : "Type your response..."}
-                placeholderTextColor="#666"
-                multiline
-                maxLength={300}
-                editable={!isLoading && !isListening}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendMessageButton, 
-                  ((!inputText.trim() && !isListening) || isLoading) && styles.sendMessageButtonDisabled,
-                  isListening && styles.voiceActiveButton
-                ]}
-                onPress={handleSendMessage}
-                disabled={(!inputText.trim() && !isListening) || isLoading}
-              >
-                <Ionicons name={isListening ? "mic" : "send"} size={20} color="#fff" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
+        {/* Floating Text Input Modal */}
+        <FloatingTextInput
+        inputText={inputText}
+        onInputChange={handleInputChange}
+        onSendMessage={handleSendMessage}
+        isLoading={isLoading}
+        isListening={isListening}
+        placeholder="Type a message..."
+      />
       </View>
     </SafeAreaView>
   );
@@ -356,7 +372,7 @@ export const CallScreen = ({
 const styles = StyleSheet.create({
   callContainer: { flex: 1, backgroundColor: '#6C67F2' },
   backgroundGradient: { ...StyleSheet.absoluteFillObject, backgroundColor: '#6C67F2' },
-  callUI: { flex: 1 },
+  callUI: { flex: 1, position: 'relative' },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'ios' ? 10 : 20, paddingBottom: 10 },
   endCallButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
   statsButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
@@ -365,77 +381,214 @@ const styles = StyleSheet.create({
   topicBadge: { backgroundColor: '#6C67F2', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
   topicBadgeText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   
-  // Listening indicator
-  listeningIndicator: {
-    position: 'absolute',
-    top: 80,
-    alignSelf: 'center',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 30,
-    zIndex: 10,
-    gap: 8,
+  videoContainer: { 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    paddingVertical: 16,
   },
-  listeningPulse: {
-    position: 'absolute',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#53C691',
-    opacity: 0.3,
-  },
-  listeningText: { color: '#53C691', fontSize: 14, fontWeight: '600' },
-  
-  videoContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', position: 'relative' },
   tutorVideoFrame: { alignItems: 'center', justifyContent: 'center' },
   tutorAvatarContainer: { alignItems: 'center' },
-  tutorAvatar: { width: 200, height: 200, borderRadius: 100, backgroundColor: '#2a2a3e', justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#53C691' },
-  tutorAvatarEmoji: { fontSize: 80 },
-  tutorName: { color: '#fff', fontSize: 24, fontWeight: '600', marginTop: 20 },
+  tutorAvatar: { 
+    width: 100, 
+    height: 100, 
+    borderRadius: 50, 
+    backgroundColor: '#2a2a3e', 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderWidth: 3, 
+    borderColor: '#53C691' 
+  },
+  tutorAvatarEmoji: { fontSize: 40 },
+  tutorName: { color: '#fff', fontSize: 24, fontWeight: '600', marginTop: 12 },
   topicFocus: { color: '#383838', fontSize: 14, marginTop: 4 },
-  tutorStatus: { color: '#888', fontSize: 14, marginTop: 8 },
   
-  selfView: { position: 'absolute', bottom: 20, right: 20, alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 12, padding: 8, borderWidth: 1, borderColor: '#444' },
-  selfAvatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#2a2a3e', justifyContent: 'center', alignItems: 'center' },
-  selfAvatarListening: { backgroundColor: '#53C691', borderWidth: 2, borderColor: '#fff' },
-  selfAvatarEmoji: { fontSize: 30 },
-  selfName: { color: '#fff', fontSize: 12, marginTop: 4 },
+  // Fixed Control Buttons Column - Right side of screen
+  controlButtonsColumn: {
+    position: 'absolute',
+    right: 12,
+    top: '40%',
+    transform: [{ translateY: -100 }],
+    backgroundColor: 'rgba(26, 26, 46, 0.9)',
+    borderRadius: 30,
+    padding: 8,
+    gap: 8,
+    zIndex: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  controlColumnButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    gap: 2,
+  },
+  activeButton: {
+    backgroundColor: '#53C691',
+  },
+  endCallColumnButton: {
+    backgroundColor: '#ff3b30',
+  },
+  controlColumnLabel: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '500',
+  },
   
-  captionsContainer: { backgroundColor: 'rgba(0,0,0,0.8)', borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: height * 0.3, marginTop: 20 },
-  captionsHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#333', gap: 8 },
+  // Taller transcript container
+  captionsContainer: { 
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.8)', 
+    borderTopLeftRadius: 20, 
+    borderTopRightRadius: 20, 
+    marginTop: 8,
+    minHeight: 200,
+  },
+  captionsHeader: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    padding: 12, 
+    borderBottomWidth: 1, 
+    borderBottomColor: '#333', 
+    gap: 8 
+  },
   captionsHeaderText: { color: '#fff', fontSize: 14, fontWeight: '600', flex: 1 },
   voiceBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#53C691', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, gap: 4 },
   voiceBadgeText: { color: '#fff', fontSize: 10, fontWeight: '600' },
   
-  transcriptScroll: { maxHeight: 200 },
-  transcriptContent: { padding: 16 },
-  transcriptMessage: { marginBottom: 16, padding: 12, borderRadius: 12 },
-  userTranscript: { backgroundColor: '#6C67F2', alignSelf: 'flex-end' },
-  tutorTranscript: { backgroundColor: '#383838', alignSelf: 'flex-start' },
-  messageHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  messageSpeaker: { color: 'rgba(255,255,255,0.7)', fontSize: 12, fontWeight: '600' },
-  messageTime: { color: 'rgba(255,255,255,0.5)', fontSize: 10 },
+  transcriptScroll: { 
+    flex: 1,
+  },
+  transcriptContent: { 
+    padding: 12, 
+    paddingBottom: 20,
+    flexGrow: 1,
+  },
+  transcriptMessage: { marginBottom: 8, padding: 10, borderRadius: 12 },
+  userTranscript: { backgroundColor: '#6C67F2', alignSelf: 'flex-end', maxWidth: '85%' },
+  tutorTranscript: { backgroundColor: '#383838', alignSelf: 'flex-start', maxWidth: '85%' },
+  messageHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
+  messageSpeaker: { color: 'rgba(255,255,255,0.7)', fontSize: 11, fontWeight: '600' },
+  messageTime: { color: 'rgba(255,255,255,0.5)', fontSize: 9 },
   messageText: { color: '#fff', fontSize: 14, lineHeight: 20 },
-  typingIndicator: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: '#2a2a3e', borderRadius: 12, alignSelf: 'flex-start' },
+  
+  repeatButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    marginLeft: 12,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: 'rgba(83, 198, 145, 0.15)',
+    borderRadius: 20,
+    gap: 6,
+  },
+  repeatButtonText: {
+    color: '#53C691',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  
+  emptyTranscript: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyTranscriptText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  typingIndicator: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, backgroundColor: '#2a2a3e', borderRadius: 12, alignSelf: 'flex-start' },
   typingText: { color: '#888', fontSize: 12 },
   
-  controlsContainer: { padding: 20, paddingBottom: Platform.OS === 'ios' ? 30 : 20 },
-  controlButtons: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', marginBottom: 16 },
-  controlButton: { alignItems: 'center', gap: 8 },
-  controlIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: 'rgba(255,255,255,0.2)', justifyContent: 'center', alignItems: 'center' },
-  controlIconActive: { backgroundColor: '#ff4444' },
-  controlIconListening: { backgroundColor: '#53C691' },
-  controlLabel: { color: '#fff', fontSize: 12 },
-  endCallControl: { alignItems: 'center', gap: 8 },
-  endCallIcon: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#ff3b30', justifyContent: 'center', alignItems: 'center' },
-  endCallLabel: { color: '#ff3b30', fontSize: 12, fontWeight: '600' },
+  // Floating Text Input Button
+  floatingTextButton: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#53C691',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 10,
+    gap: 2,
+  },
+  floatingTextButtonLabel: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '500',
+  },
   
-  messageInputContainer: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#1a1a1a', borderRadius: 30, paddingHorizontal: 16, paddingVertical: 8 },
-  messageInput: { flex: 1, color: '#fff', fontSize: 16, maxHeight: 80 },
-  sendMessageButton: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#007AFF', justifyContent: 'center', alignItems: 'center' },
-  sendMessageButtonDisabled: { backgroundColor: '#555', opacity: 0.5 },
-  voiceActiveButton: { backgroundColor: '#53C691' },
+  // Floating Input Modal
+  floatingInputContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#1a1a1a',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 16,
+    zIndex: 30,
+  },
+  floatingInputWrapper: {
+    gap: 12,
+  },
+  floatingInputHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#333',
+  },
+  floatingInputTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  floatingTextInput: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 12,
+    padding: 12,
+    color: '#fff',
+    fontSize: 16,
+    maxHeight: 120,
+    minHeight: 60,
+    textAlignVertical: 'top',
+  },
+  floatingSendButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#007AFF',
+    borderRadius: 30,
+    paddingVertical: 12,
+    gap: 8,
+  },
+  floatingSendButtonDisabled: {
+    backgroundColor: '#555',
+    opacity: 0.5,
+  },
+  floatingSendButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });

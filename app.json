@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "hello",
-    "slug": "hello",
+    "name": "HelloAi",
+    "slug": "helloai",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -13,7 +13,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "Allow $(PRODUCT_NAME) to use speech recognition for language learning.",
+        "NSMicrophoneUsageDescription": "Allow $(PRODUCT_NAME) to use the microphone for voice conversations."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -38,6 +42,12 @@
     ],
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "55693bc4-89a8-43a6-bbda-8ed83bd6e58d"
+      }
+    },
+    "owner": "helloai-operations"
   }
 }

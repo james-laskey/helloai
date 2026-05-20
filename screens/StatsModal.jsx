@@ -8,13 +8,14 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  ActivityIndicator
+  ActivityIndicator,
+  FlatList
 } from 'react-native';
 import Ionicons from '@react-native-vector-icons/ionicons';
 
 export const StatsModal = ({ visible, onClose, userStats }) => {
-  const [selectedLanguage, setSelectedLanguage] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [expandedLanguage, setExpandedLanguage] = useState(null);
 
   useEffect(() => {
     if (visible) {
@@ -26,9 +27,6 @@ export const StatsModal = ({ visible, onClose, userStats }) => {
   if (!visible) return null;
 
   const languages = userStats?.languages || [];
-  const selectedLangData = selectedLanguage 
-    ? languages.find(l => l.language === selectedLanguage) 
-    : null;
 
   const renderOverallStats = () => (
     <View style={styles.overallContainer}>
@@ -38,6 +36,11 @@ export const StatsModal = ({ visible, onClose, userStats }) => {
           <Ionicons name="time-outline" size={24} color="#53C691" />
           <Text style={styles.statBoxValue}>{userStats?.total_duration_formatted || '0m'}</Text>
           <Text style={styles.statBoxLabel}>Total Time</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Ionicons name="chatbubbles-outline" size={24} color="#6C67F2" />
+          <Text style={styles.statBoxValue}>{userStats?.total_sessions || 0}</Text>
+          <Text style={styles.statBoxLabel}>Sessions</Text>
         </View>
         <View style={styles.statBox}>
           <Ionicons name="help-buoy" size={24} color="#FF8C00" />
@@ -58,129 +61,106 @@ export const StatsModal = ({ visible, onClose, userStats }) => {
     </View>
   );
 
-  const renderLanguageSelector = () => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.languageScroll}>
-      <TouchableOpacity
-        style={[styles.languageChip, !selectedLanguage && styles.languageChipActive]}
-        onPress={() => setSelectedLanguage(null)}
-      >
-        <Text style={[styles.languageChipText, !selectedLanguage && styles.languageChipTextActive]}>
-          All Languages
-        </Text>
-      </TouchableOpacity>
-      {languages.map((lang) => (
-        <TouchableOpacity
-          key={lang.language}
-          style={[styles.languageChip, selectedLanguage === lang.language && styles.languageChipActive]}
-          onPress={() => setSelectedLanguage(lang.language)}
-        >
-          <Text style={[styles.languageChipText, selectedLanguage === lang.language && styles.languageChipTextActive]}>
-            {lang.language}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
-  );
-
-  const renderLanguageDetails = () => {
-    if (!selectedLangData) return null;
-
+  const renderLanguageItem = ({ item: lang }) => {
+    const isExpanded = expandedLanguage === lang.language;
+    
     return (
-      <View style={styles.detailsContainer}>
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Sessions</Text>
-            <Text style={styles.detailValue}>{selectedLangData.totalSessions || 0}</Text>
+      <TouchableOpacity 
+        style={styles.languageCard}
+        activeOpacity={0.8}
+        onPress={() => setExpandedLanguage(isExpanded ? null : lang.language)}
+      >
+        <View style={styles.languageCardHeader}>
+          <View style={styles.languageTitleContainer}>
+            <Text style={styles.languageIcon}>
+              {lang.language === 'Spanish' ? '🇪🇸' : 
+               lang.language === 'French' ? '🇫🇷' :
+               lang.language === 'Japanese' ? '🇯🇵' :
+               lang.language === 'Korean' ? '🇰🇷' :
+               lang.language === 'German' ? '🇩🇪' :
+               lang.language === 'Italian' ? '🇮🇹' :
+               lang.language === 'English' ? '🇬🇧' :
+               lang.language === 'Chinese' ? '🇨🇳' : '🌐'}
+            </Text>
+            <Text style={styles.languageName}>{lang.language}</Text>
           </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Messages</Text>
-            <Text style={styles.detailValue}>{selectedLangData.totalMessages || 0}</Text>
+          <Ionicons 
+            name={isExpanded ? "chevron-up" : "chevron-down"} 
+            size={20} 
+            color="#888" 
+          />
+        </View>
+        
+        {/* Compact stats always visible */}
+        <View style={styles.compactStats}>
+          <View style={styles.compactStat}>
+            <Ionicons name="time-outline" size={14} color="#53C691" />
+            <Text style={styles.compactStatValue}>{lang.totalDurationFormatted || '0m'}</Text>
           </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Time</Text>
-            <Text style={styles.detailValue}>
-              {Math.floor((selectedLangData.totalDurationSeconds || 0) / 60)}m
+          <View style={styles.compactStat}>
+            <Ionicons name="chatbubbles-outline" size={14} color="#6C67F2" />
+            <Text style={styles.compactStatValue}>{lang.totalSessions || 0}</Text>
+          </View>
+          <View style={styles.compactStat}>
+            <Ionicons name="help-buoy" size={14} color="#FF8C00" />
+            <Text style={styles.compactStatValue}>{lang.quizzesCompleted || 0}</Text>
+          </View>
+          <View style={styles.compactStat}>
+            <Ionicons name="card" size={14} color="#6C67F2" />
+            <Text style={styles.compactStatValue}>
+              {lang.flashcardsMastered || 0}/{lang.totalFlashcards || 0}
             </Text>
           </View>
         </View>
-
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Quizzes</Text>
-            <Text style={styles.detailValue}>{selectedLangData.quizzesCompleted || 0}</Text>
+        
+        {/* Expanded details */}
+        {isExpanded && (
+          <View style={styles.expandedDetails}>
+            <View style={styles.detailRow}>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Messages</Text>
+                <Text style={styles.detailValue}>{lang.totalMessages || 0}</Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Avg Score</Text>
+                <Text style={styles.detailValue}>{Math.round(lang.averageQuizScore || 0)}%</Text>
+              </View>
+              <View style={styles.detailItem}>
+                <Text style={styles.detailLabel}>Mastery</Text>
+                <Text style={styles.detailValue}>
+                  {lang.totalFlashcards > 0 
+                    ? Math.round((lang.flashcardsMastered / lang.totalFlashcards) * 100)
+                    : 0}%
+                </Text>
+              </View>
+            </View>
+            
+            <View style={styles.progressSection}>
+              <Text style={styles.progressLabel}>Flashcard Mastery</Text>
+              <View style={styles.progressBar}>
+                <View 
+                  style={[
+                    styles.progressFill, 
+                    { 
+                      width: `${lang.totalFlashcards > 0 
+                        ? (lang.flashcardsMastered / lang.totalFlashcards) * 100 
+                        : 0}%` 
+                    }
+                  ]} 
+                />
+              </View>
+            </View>
+            
+            {lang.lastPracticed && (
+              <Text style={styles.lastPracticed}>
+                Last practiced: {new Date(lang.lastPracticed).toLocaleDateString()}
+              </Text>
+            )}
           </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Avg Score</Text>
-            <Text style={styles.detailValue}>
-              {Math.round(selectedLangData.averageQuizScore || 0)}%
-            </Text>
-          </View>
-          <View style={styles.detailItem}>
-            <Text style={styles.detailLabel}>Flashcards</Text>
-            <Text style={styles.detailValue}>
-              {selectedLangData.flashcardsMastered || 0}/{selectedLangData.totalFlashcards || 0}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.progressSection}>
-          <Text style={styles.progressLabel}>Flashcard Mastery</Text>
-          <View style={styles.progressBar}>
-            <View 
-              style={[
-                styles.progressFill, 
-                { width: `${((selectedLangData.flashcardsMastered || 0) / (selectedLangData.totalFlashcards || 1)) * 100}%` }
-              ]} 
-            />
-          </View>
-          <Text style={styles.progressPercent}>
-            {Math.round(((selectedLangData.flashcardsMastered || 0) / (selectedLangData.totalFlashcards || 1)) * 100)}% Mastered
-          </Text>
-        </View>
-
-        {selectedLangData.lastPracticed && (
-          <Text style={styles.lastPracticed}>
-            Last practiced: {new Date(selectedLangData.lastPracticed).toLocaleDateString()}
-          </Text>
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
-
-  const renderLanguageList = () => (
-    <View style={styles.languageList}>
-      {languages.map((lang) => (
-        <TouchableOpacity
-          key={lang.language}
-          style={styles.languageCard}
-          onPress={() => setSelectedLanguage(lang.language)}
-        >
-          <View style={styles.languageCardHeader}>
-            <Text style={styles.languageName}>{lang.language}</Text>
-            <Ionicons name="chevron-forward" size={20} color="#888" />
-          </View>
-          <View style={styles.languageStats}>
-            <View style={styles.languageStat}>
-              <Ionicons name="time-outline" size={14} color="#888" />
-              <Text style={styles.languageStatText}>
-                {Math.floor((lang.totalDurationSeconds || 0) / 60)} min
-              </Text>
-            </View>
-            <View style={styles.languageStat}>
-              <Ionicons name="help-buoy" size={14} color="#888" />
-              <Text style={styles.languageStatText}>{lang.quizzesCompleted || 0} quizzes</Text>
-            </View>
-            <View style={styles.languageStat}>
-              <Ionicons name="card" size={14} color="#888" />
-              <Text style={styles.languageStatText}>
-                {lang.flashcardsMastered || 0}/{lang.totalFlashcards || 0} cards
-              </Text>
-            </View>
-          </View>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
 
   return (
     <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
@@ -199,8 +179,25 @@ export const StatsModal = ({ visible, onClose, userStats }) => {
             ) : (
               <>
                 {renderOverallStats()}
-                {renderLanguageSelector()}
-                {selectedLanguage ? renderLanguageDetails() : renderLanguageList()}
+                
+                <View style={styles.languagesSection}>
+                  <Text style={styles.sectionTitle}>Languages Practiced</Text>
+                  {languages.length > 0 ? (
+                    <FlatList
+                      data={languages}
+                      keyExtractor={(item) => item.language}
+                      renderItem={renderLanguageItem}
+                      scrollEnabled={false}
+                      contentContainerStyle={styles.languagesList}
+                    />
+                  ) : (
+                    <View style={styles.emptyContainer}>
+                      <Ionicons name="book-outline" size={48} color="rgba(255,255,255,0.3)" />
+                      <Text style={styles.emptyText}>No language data yet</Text>
+                      <Text style={styles.emptySubtext}>Complete a session to see your stats!</Text>
+                    </View>
+                  )}
+                </View>
               </>
             )}
           </ScrollView>
@@ -220,28 +217,28 @@ const styles = StyleSheet.create({
     backgroundColor: '#1a1a1a', 
     borderTopLeftRadius: 30, 
     borderTopRightRadius: 30, 
-    maxHeight: '90%',
+    maxHeight: '85%',
     minHeight: '70%'
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#333',
   },
   modalTitle: { 
-    fontSize: 22, 
+    fontSize: 20, 
     fontWeight: 'bold', 
     color: '#fff' 
   },
   closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -250,7 +247,7 @@ const styles = StyleSheet.create({
     marginVertical: 50,
   },
   overallContainer: {
-    padding: 20,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#333',
   },
@@ -263,59 +260,44 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 10,
   },
   statBox: {
     flex: 1,
-    minWidth: '45%',
+    minWidth: '30%',
     backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: 12,
+    padding: 12,
     alignItems: 'center',
   },
   statBoxValue: {
     color: '#fff',
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginTop: 8,
+    marginTop: 6,
   },
   statBoxLabel: {
     color: '#888',
-    fontSize: 12,
+    fontSize: 10,
     marginTop: 4,
   },
-  languageScroll: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginVertical: 16,
+  languagesSection: {
+    padding: 16,
   },
-  languageChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    marginRight: 10,
-  },
-  languageChipActive: {
-    backgroundColor: '#53C691',
-  },
-  languageChipText: {
-    color: '#fff',
-    fontSize: 14,
-  },
-  languageChipTextActive: {
-    color: '#fff',
+  sectionTitle: {
+    color: '#53C691',
+    fontSize: 16,
     fontWeight: '600',
+    marginBottom: 12,
   },
-  languageList: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+  languagesList: {
     gap: 12,
   },
   languageCard: {
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 16,
     padding: 16,
+    marginBottom: 12,
   },
   languageCardHeader: {
     flexDirection: 'row',
@@ -323,78 +305,104 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  languageTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  languageIcon: {
+    fontSize: 28,
+  },
   languageName: {
     color: '#fff',
     fontSize: 18,
     fontWeight: '600',
   },
-  languageStats: {
+  compactStats: {
     flexDirection: 'row',
-    gap: 16,
+    justifyContent: 'space-between',
+    marginBottom: 12,
   },
-  languageStat: {
+  compactStat: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
   },
-  languageStatText: {
-    color: '#aaa',
+  compactStatValue: {
+    color: '#fff',
     fontSize: 12,
+    fontWeight: '500',
   },
-  detailsContainer: {
-    padding: 20,
-    gap: 16,
+  expandedDetails: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     gap: 12,
+    marginBottom: 16,
   },
   detailItem: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 12,
-    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: 10,
+    padding: 10,
     alignItems: 'center',
   },
   detailLabel: {
     color: '#888',
-    fontSize: 12,
+    fontSize: 11,
     marginBottom: 4,
   },
   detailValue: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: 'bold',
   },
   progressSection: {
-    marginTop: 8,
+    marginBottom: 12,
   },
   progressLabel: {
     color: '#fff',
-    fontSize: 14,
-    marginBottom: 8,
+    fontSize: 12,
+    marginBottom: 6,
   },
   progressBar: {
-    height: 8,
+    height: 6,
     backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 4,
+    borderRadius: 3,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     backgroundColor: '#53C691',
-    borderRadius: 4,
-  },
-  progressPercent: {
-    color: '#53C691',
-    fontSize: 12,
-    marginTop: 6,
+    borderRadius: 3,
   },
   lastPracticed: {
     color: '#888',
-    fontSize: 12,
+    fontSize: 11,
     textAlign: 'center',
     marginTop: 8,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyText: {
+    color: '#fff',
+    fontSize: 16,
+    marginTop: 12,
+  },
+  emptySubtext: {
+    color: '#888',
+    fontSize: 14,
+    marginTop: 4,
   },
 });
