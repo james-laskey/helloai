@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "HelloAi",
+    "name": "HelloAI",
     "slug": "helloai",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -38,7 +38,16 @@
           "microphonePermission": "Allow $(PRODUCT_NAME) to use the microphone for voice conversations.",
           "speechRecognitionPermission": "Allow $(PRODUCT_NAME) to use speech recognition for language learning."
         }
-      ]
+      ],
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-7771195501439294~9109781400",
+          "iosAppId": "ca-app-pub-3940256099942544~1458002511",
+          "userTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
+        }
+      ],
+      "expo-asset"
     ],
     "web": {
       "favicon": "./assets/favicon.png"

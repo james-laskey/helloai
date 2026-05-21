@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import * as Speech from 'expo-speech';
+import mobileAds from 'react-native-google-mobile-ads';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthScreen } from './screens/AuthScreen';
 import { QuestionnaireScreen } from './screens/QuestionnaireScreen';
@@ -35,6 +36,15 @@ const App = () => {
   // Load saved user data on startup
   useEffect(() => {
     loadUserData();
+  }, []);
+
+  useEffect(() => {
+    // Initialize the Google Mobile Ads SDK
+    mobileAds()
+      .initialize()
+      .then(adapterStatuses => {
+        console.log('Mobile Ads SDK initialized');
+      });
   }, []);
 
   const loadUserData = async () => {

@@ -9,17 +9,18 @@
     "web": "expo start --web"
   },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "2.2.0",
-    "@react-native-vector-icons/ionicons": "^13.1.0",
-    "expo": "~54.0.33",
-    "expo-speech": "^55.0.13",
-    "expo-speech-recognition": "^3.1.2",
-    "expo-status-bar": "~3.0.9",
-    "react": "19.1.0",
-    "react-native": "0.81.5",
-    "react-native-google-mobile-ads": "^16.3.3",
-    "react-native-safe-area-context": "~5.6.0",
-    "uuid": "^14.0.0"
+    "@react-native-async-storage/async-storage": "1.23.1",
+    "@react-native-vector-icons/ionicons": "12.0.0",
+    "expo": "~52.0.49",
+    "expo-asset": "~11.0.5",
+    "expo-speech": "~13.0.1",
+    "expo-speech-recognition": "2.0.0",
+    "expo-status-bar": "~2.0.1",
+    "react": "18.3.1",
+    "react-native": "0.76.9",
+    "react-native-google-mobile-ads": "14.7.2",
+    "react-native-safe-area-context": "4.12.0",
+    "uuid": "10.0.0"
   },
   "private": true
 }

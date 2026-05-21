@@ -1,123 +1,78 @@
-// components/InterstitialAdComponent.js
-
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Modal, ActivityIndicator, Text, StyleSheet } from 'react-native';
-import { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
+import mobileAds, { InterstitialAd, AdEventType, TestIds } from 'react-native-google-mobile-ads';
 
-// Use test IDs during development, replace with real IDs for production
-const AD_UNIT_ID = __DEV__ 
-  ? TestIds.INTERSTITIAL
-  : 'ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy'; // Replace with your real Interstitial Ad Unit ID
+// Use test ads during development
+// const adUnitId = __DEV__ ? TestIds.INTERSTITIAL : 'ca-app-pub-7771195501439294/5587441583';
+const adUnitId = 'ca-app-pub-7771195501439294/5587441583';
 
 export const InterstitialAdComponent = ({ visible, onClose, onAdComplete }) => {
   const [loading, setLoading] = useState(true);
-  const [canSkip, setCanSkip] = useState(false);
   const interstitialRef = useRef(null);
-  const timerRef = useRef(null);
 
+  // Initialize Mobile Ads SDK once
   useEffect(() => {
-    if (visible) {
+    if (visible && !interstitialRef.current) {
       loadAndShowAd();
     }
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    };
   }, [visible]);
 
   const loadAndShowAd = async () => {
-    setLoading(true);
-    setCanSkip(false);
-    
-    // Create interstitial ad instance
-    const interstitial = InterstitialAd.createForAdRequest(AD_UNIT_ID, {
-      requestNonPersonalizedAdsOnly: true,
-    });
-    interstitialRef.current = interstitial;
-
-    // Set up event listeners
-    const unsubscribeLoaded = interstitial.addAdEventListener(AdEventType.LOADED, () => {
-      setLoading(false);
-      interstitial.show();
+    try {
+      setLoading(true);
       
-      // Start 5-second timer for skip button
-      timerRef.current = setTimeout(() => {
-        setCanSkip(true);
-      }, 5000);
-    });
+      // Create interstitial ad
+      const interstitial = InterstitialAd.createForAdRequest(adUnitId, {
+        requestNonPersonalizedAdsOnly: true,
+      });
+      interstitialRef.current = interstitial;
 
-    const unsubscribeClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-      if (onAdComplete) {
-        onAdComplete();
-      }
-      onClose();
-    });
+      // Add event listeners
+      const unsubscribeLoaded = interstitial.addAdEventListener(AdEventType.LOADED, () => {
+        setLoading(false);
+        interstitial.show();
+      });
 
-    const unsubscribeError = interstitial.addAdEventListener(AdEventType.ERROR, (error) => {
-      console.error('Ad error:', error);
+      const unsubscribeClosed = interstitial.addAdEventListener(AdEventType.CLOSED, () => {
+        cleanup();
+        if (onAdComplete) onAdComplete();
+        if (onClose) onClose();
+      });
+
+      const unsubscribeError = interstitial.addAdEventListener(AdEventType.ERROR, (error) => {
+        console.error('Ad error:', error);
+        cleanup();
+        if (onAdComplete) onAdComplete();
+        if (onClose) onClose();
+      });
+
+      // Load the ad
+      interstitial.load();
+
+      function cleanup() {
+        unsubscribeLoaded();
+        unsubscribeClosed();
+        unsubscribeError();
+        interstitialRef.current = null;
+      }
+      
+    } catch (error) {
+      console.error('Error loading ad:', error);
       setLoading(false);
-      // If ad fails to load, just close and continue
-      if (onAdComplete) {
-        onAdComplete();
-      }
-      onClose();
-    });
-
-    // Load the ad
-    interstitial.load();
-
-    // Cleanup listeners when ad is done
-    return () => {
-      unsubscribeLoaded();
-      unsubscribeClosed();
-      unsubscribeError();
-    };
-  };
-
-  // Manual close handler (only available after 5 seconds)
-  const handleManualClose = () => {
-    if (canSkip && interstitialRef.current) {
-      interstitialRef.current.close();
+      if (onAdComplete) onAdComplete();
+      if (onClose) onClose();
     }
   };
 
+  if (!visible) return null;
+
   return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      animationType="fade"
-      onRequestClose={() => {
-        if (canSkip) {
-          onClose();
-        }
-      }}
-    >
+    <Modal visible={visible} transparent={true} animationType="fade" onRequestClose={onClose}>
       <View style={styles.modalContainer}>
-        {loading ? (
+        {loading && (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#53C691" />
             <Text style={styles.loadingText}>Loading ad...</Text>
-          </View>
-        ) : null}
-        
-        {/* Optional: Custom skip button overlay */}
-        {!loading && canSkip && (
-          <TouchableOpacity 
-            style={styles.skipButton}
-            onPress={handleManualClose}
-          >
-            <Text style={styles.skipButtonText}>Skip Ad ›</Text>
-          </TouchableOpacity>
-        )}
-        
-        {/* Optional: Timer indicator */}
-        {!loading && !canSkip && (
-          <View style={styles.timerIndicator}>
-            <Text style={styles.timerText}>Ad closes in 5s</Text>
           </View>
         )}
       </View>
@@ -138,35 +93,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     color: '#fff',
-    fontSize: 18,
-    marginTop: 20,
-  },
-  skipButton: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    zIndex: 10,
-  },
-  skipButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  timerIndicator: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-  },
-  timerText: {
-    color: '#aaa',
-    fontSize: 12,
+    fontSize: 16,
+    marginTop: 12,
   },
 });
