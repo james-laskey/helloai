@@ -16,6 +16,7 @@ import Ionicons from '@react-native-vector-icons/ionicons';
 import { CallScreen } from './CallScreen';
 import { FlashcardComponent } from '../components/FlashcardComponent';
 import { QuizComponent } from '../components/QuizComponent';
+import { InterstitialAdComponent } from '../components/InterstitialAdComponent';
 import { learningApi } from '../services/learningApi';
 
 export const LearningScreen = ({ 
@@ -60,6 +61,10 @@ export const LearningScreen = ({
   const [showDatasetSelector, setShowDatasetSelector] = useState(false);
   const [selectedDataset, setSelectedDataset] = useState(null);
   const [loadingPrevious, setLoadingPrevious] = useState(false);
+  
+  // Ad state
+  const [showAd, setShowAd] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState(false);
 
   // Fetch previous datasets when component mounts
   useEffect(() => {
@@ -237,20 +242,28 @@ export const LearningScreen = ({
     }
   };
 
+  // Updated completion handlers with ad display
   const handleFlashcardComplete = async (knownCount, totalCount) => {
     console.log(`Flashcard session completed! Known: ${knownCount}/${totalCount}`);
     await submitFlashcardCompletion(knownCount, totalCount);
-    setTimeout(() => {
-      onBack();
-    }, 1500);
+    // Show interstitial ad before navigating back
+    setShowAd(true);
   };
 
   const handleQuizComplete = async (score, total, answers) => {
     console.log(`Quiz complete! Score: ${score}/${total}`);
     await submitQuizResults(answers, score, total);
+    // Show interstitial ad before navigating back
+    setShowAd(true);
+  };
+
+  const handleAdComplete = () => {
+    console.log('Ad completed or closed');
+    setShowAd(false);
+    // Navigate back after ad completes
     setTimeout(() => {
       onBack();
-    }, 1500);
+    }, 100);
   };
 
   const handleBack = () => {
@@ -488,6 +501,16 @@ export const LearningScreen = ({
       <View style={styles.content}>
         {renderContent()}
       </View>
+      
+      {/* Interstitial Ad Component */}
+      <InterstitialAdComponent
+        visible={showAd}
+        onClose={() => {
+          setShowAd(false);
+          onBack();
+        }}
+        onAdComplete={handleAdComplete}
+      />
     </SafeAreaView>
   );
 };
